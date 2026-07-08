@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>find-me — 從照片海撈出自己</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; max-width: 1100px; padding: 24px 16px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  h1 { font-size: 1.4rem; }
+  #drop {
+    border: 2px dashed #999; border-radius: 12px; padding: 40px 16px;
+    text-align: center; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  #drop.dragover { border-color: #4a90d9; background: rgba(74, 144, 217, .1); }
+  #drop img { max-height: 120px; border-radius: 8px; display: block; margin: 0 auto 8px; }
+  #controls { display: flex; align-items: center; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+  #thr { width: 200px; }
+  #status { margin: 8px 0; min-height: 1.4em; }
+  #status.error { color: #d9534f; }
+  #grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+  #grid a { position: relative; display: block; border-radius: 8px; overflow: hidden; }
+  #grid img { width: 100%; height: 160px; object-fit: cover; display: block; }
+  #grid .score {
+    position: absolute; left: 0; bottom: 0; right: 0;
+    padding: 2px 6px; font-size: .78rem; color: #fff;
+    background: rgba(0, 0, 0, .55); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+</style>
+</head>
+<body>
+<h1>find-me — 從照片海撈出自己</h1>
+
+<div id="drop">
+  <input id="file" type="file" accept="image/*" hidden>
+  <div id="drop-hint">點擊選擇或拖放一張「自己的照片」到這裡</div>
+</div>
+
+<div id="controls">
+  <label>相似度門檻 <b id="thr-val">0.40</b></label>
+  <input id="thr" type="range" min="0.30" max="0.50" step="0.01" value="0.40">
+  <span style="font-size:.85rem; opacity:.7">撈太少調低、混入別人調高</span>
+</div>
+
+<div id="status"></div>
+<div id="grid"></div>
+
+<script>
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+const thr = document.getElementById('thr');
+const thrVal = document.getElementById('thr-val');
+const status = document.getElementById('status');
+const grid = document.getElementById('grid');
+let queryFile = null;
+
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => fileInput.files[0] && setQuery(fileInput.files[0]));
+
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) setQuery(e.dataTransfer.files[0]);
+});
+
+thr.addEventListener('input', () => { thrVal.textContent = Number(thr.value).toFixed(2); });
+thr.addEventListener('change', () => queryFile && search());
+
+function setQuery(file) {
+  queryFile = file;
+  document.getElementById('drop-hint').innerHTML = '';
+  const img = document.createElement('img');
+  img.src = URL.createObjectURL(file);
+  const hint = document.getElementById('drop-hint');
+  hint.append(img, file.name + '（點擊可換照片）');
+  search();
+}
+
+async function search() {
+  status.classList.remove('error');
+  status.textContent = '搜尋中…';
+  grid.innerHTML = '';
+  const form = new FormData();
+  form.append('file', queryFile);
+  try {
+    const res = await fetch(`/api/search?threshold=${thr.value}`, { method: 'POST', body: form });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    status.textContent = `找到 ${body.length} 張照片（門檻 ${Number(thr.value).toFixed(2)}）`;
+    for (const hit of body) {
+      const a = document.createElement('a');
+      a.href = `/api/photo/${hit.id}`;
+      a.target = '_blank';
+      a.title = hit.filename;
+      const img = document.createElement('img');
+      img.src = `/api/thumb/${hit.id}`;
+      img.loading = 'lazy';
+      const label = document.createElement('div');
+      label.className = 'score';
+      label.textContent = `${hit.score.toFixed(3)}　${hit.filename}`;
+      a.append(img, label);
+      grid.append(a);
+    }
+  } catch (err) {
+    status.classList.add('error');
+    status.textContent = `錯誤：${err.message}`;
+  }
+}
+</script>
+</body>
+</html>
