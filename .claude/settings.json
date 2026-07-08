@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "deny": [
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+
+      "Read(**/.env)",
+      "Edit(**/.env)",
+      "Write(**/.env)",
+
+      "Read(**/.env.*)",
+      "Edit(**/.env.*)",
+      "Write(**/.env.*)",
+
+      "Read(!**/.env.example)",
+      "Edit(!**/.env.example)",
+      "Write(!**/.env.example)"
+    ]
+  }
+}

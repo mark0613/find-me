@@ -1,0 +1,27 @@
+line-length = 100
+exclude = [
+    ".git",
+    ".ruff_cache",
+    "logs",
+    "venv",
+    ".venv",
+    "tmp",
+]
+
+[lint]
+select = [
+    "F401",
+    "I",
+    "Q",
+]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[lint.flake8-quotes]
+inline-quotes = "single"
+multiline-quotes = "double"
+docstring-quotes = "double"
+
+[format]
+quote-style = "single"
