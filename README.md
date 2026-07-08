@@ -32,7 +32,7 @@ uv run python -m src.build_index --photos "D:\你的照片目錄"
 uv run python main.py
 ```
 
-開啟 <http://127.0.0.1:8000>，上傳一張自己的照片即可搜尋。
+開啟 <http://127.0.0.1:8613>，上傳一張自己的照片即可搜尋。
 
 ## 門檻調校
 
