@@ -1,6 +1,4 @@
-def main():
-    print('Hello from find-me!')
-
+import uvicorn
 
 if __name__ == '__main__':
-    main()
+    uvicorn.run('src.main:app', host='127.0.0.1', port=8000)
