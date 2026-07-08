@@ -1,10 +1,13 @@
+import io
 import os
+import zipfile
 from pathlib import Path
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 
 from src.search_engine import NoFaceError, SearchEngine
 
@@ -62,3 +65,34 @@ def thumbnail(face_id: int):
 @app.get('/api/photo/{face_id}')
 def photo(face_id: int):
     return FileResponse(_photo_path(face_id))
+
+
+class DownloadRequest(BaseModel):
+    ids: list[int]
+
+
+@app.post('/api/download')
+def download(req: DownloadRequest):
+    paths: dict[Path, None] = {}
+    for face_id in req.ids:
+        if not 0 <= face_id < len(engine.meta):
+            continue
+        path = Path(engine.meta[face_id]['path'])
+        if path.exists():
+            paths[path] = None
+    if not paths:
+        raise HTTPException(404, '沒有可下載的照片')
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+        used = set()
+        for path in paths:
+            name, n = path.name, 1
+            while name in used:
+                name = f'{path.stem}_{n}{path.suffix}'
+                n += 1
+            used.add(name)
+            zf.write(path, name)
+
+    headers = {'Content-Disposition': 'attachment; filename="find-me-photos.zip"'}
+    return Response(buf.getvalue(), media_type='application/zip', headers=headers)

@@ -22,6 +22,12 @@
   #thr { width: 200px; }
   #status { margin: 8px 0; min-height: 1.4em; }
   #status.error { color: #d9534f; }
+  #result-bar { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+  #download {
+    padding: 6px 14px; border: none; border-radius: 8px; cursor: pointer;
+    background: #4a90d9; color: #fff; font-size: .9rem;
+  }
+  #download:disabled { opacity: .6; cursor: wait; }
   #grid {
     display: grid; gap: 12px;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -50,7 +56,10 @@
   <span style="font-size:.85rem; opacity:.7">撈太少調低、混入別人調高</span>
 </div>
 
-<div id="status"></div>
+<div id="result-bar">
+  <div id="status"></div>
+  <button id="download" hidden>一鍵下載</button>
+</div>
 <div id="grid"></div>
 
 <script>
@@ -60,7 +69,9 @@ const thr = document.getElementById('thr');
 const thrVal = document.getElementById('thr-val');
 const status = document.getElementById('status');
 const grid = document.getElementById('grid');
+const downloadBtn = document.getElementById('download');
 let queryFile = null;
+let hits = [];
 
 drop.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => fileInput.files[0] && setQuery(fileInput.files[0]));
@@ -90,13 +101,20 @@ async function search() {
   status.classList.remove('error');
   status.textContent = '搜尋中…';
   grid.innerHTML = '';
+  hits = [];
+  downloadBtn.hidden = true;
   const form = new FormData();
   form.append('file', queryFile);
   try {
     const res = await fetch(`/api/search?threshold=${thr.value}`, { method: 'POST', body: form });
     const body = await res.json();
     if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    hits = body;
     status.textContent = `找到 ${body.length} 張照片（門檻 ${Number(thr.value).toFixed(2)}）`;
+    if (body.length) {
+      downloadBtn.hidden = false;
+      downloadBtn.textContent = `一鍵下載（${body.length} 張）`;
+    }
     for (const hit of body) {
       const a = document.createElement('a');
       a.href = `/api/photo/${hit.id}`;
@@ -116,6 +134,32 @@ async function search() {
     status.textContent = `錯誤：${err.message}`;
   }
 }
+
+downloadBtn.addEventListener('click', async () => {
+  downloadBtn.disabled = true;
+  const label = downloadBtn.textContent;
+  downloadBtn.textContent = '打包中…';
+  try {
+    const res = await fetch('/api/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: hits.map(h => h.id) }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || `HTTP ${res.status}`);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'find-me-photos.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    status.classList.add('error');
+    status.textContent = `下載失敗：${err.message}`;
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = label;
+  }
+});
 </script>
 </body>
 </html>
