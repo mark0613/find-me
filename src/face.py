@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import onnxruntime as ort
 from insightface.app import FaceAnalysis
 
 MAX_SIDE = 1920
@@ -15,6 +16,8 @@ def get_app() -> FaceAnalysis:
 
 
 def _create_app() -> FaceAnalysis:
+    if hasattr(ort, 'preload_dlls'):
+        ort.preload_dlls()  # 讓 ORT 找到 pip 安裝的 CUDA/cuDNN DLL，CPU 環境為 no-op
     try:
         app = FaceAnalysis(
             name='buffalo_l',
