@@ -57,10 +57,11 @@
 </div>
 
 <div id="result-bar">
-  <div id="status"></div>
+  <div id="status" role="status" aria-live="polite"></div>
   <button id="download" hidden>一鍵下載</button>
 </div>
 <div id="grid"></div>
+<iframe name="download-target" title="下載檔案" hidden></iframe>
 
 <script>
 const drop = document.getElementById('drop');
@@ -135,27 +136,32 @@ async function search() {
   }
 }
 
-downloadBtn.addEventListener('click', async () => {
+downloadBtn.addEventListener('click', () => {
   downloadBtn.disabled = true;
   const label = downloadBtn.textContent;
-  downloadBtn.textContent = '打包中…';
+  downloadBtn.textContent = '準備下載…';
+  const form = document.createElement('form');
   try {
-    const res = await fetch('/api/download', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: hits.map(h => h.id) }),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || `HTTP ${res.status}`);
-    const url = URL.createObjectURL(await res.blob());
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'find-me-photos.zip';
-    a.click();
-    URL.revokeObjectURL(url);
+    form.method = 'post';
+    form.action = '/api/download/file';
+    form.target = 'download-target';
+    form.hidden = true;
+    for (const hit of hits) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'ids';
+      input.value = hit.id;
+      form.append(input);
+    }
+    document.body.append(form);
+    form.submit();
+    status.classList.remove('error');
+    status.textContent = '下載已開始，請查看瀏覽器下載進度';
   } catch (err) {
     status.classList.add('error');
     status.textContent = `下載失敗：${err.message}`;
   } finally {
+    form.remove();
     downloadBtn.disabled = false;
     downloadBtn.textContent = label;
   }

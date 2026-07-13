@@ -1,11 +1,11 @@
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Annotated, Iterator
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, HTTPException, Query, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from stream_zip import NO_COMPRESSION_64, MemberFile, stream_zip
@@ -88,10 +88,9 @@ def _zip_members(files: list[tuple[Path, str]]) -> Iterator[MemberFile]:
         )
 
 
-@app.post('/api/download')
-def download(req: DownloadRequest):
+def _download_response(ids: list[int]) -> StreamingResponse:
     paths: dict[Path, None] = {}
-    for face_id in req.ids:
+    for face_id in ids:
         if not 0 <= face_id < len(engine.meta):
             continue
         path = Path(engine.meta[face_id]['path'])
@@ -116,3 +115,13 @@ def download(req: DownloadRequest):
         media_type='application/zip',
         headers=headers,
     )
+
+
+@app.post('/api/download')
+def download(req: DownloadRequest):
+    return _download_response(req.ids)
+
+
+@app.post('/api/download/file')
+def download_file(ids: Annotated[list[int], Form()]):
+    return _download_response(ids)
