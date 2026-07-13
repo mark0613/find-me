@@ -1,19 +1,21 @@
-import io
 import os
-import zipfile
+from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
+from stream_zip import NO_COMPRESSION_64, MemberFile, stream_zip
 
 from src.search_engine import NoFaceError, SearchEngine
 
 INDEX_DIR = Path(os.environ.get('FINDME_INDEX_DIR', 'data/index'))
 STATIC_DIR = Path(__file__).parent / 'static'
 THUMB_MAX_SIDE = 480
+READ_BLOCK_BYTES = 1024 * 1024
 
 app = FastAPI(title='find-me')
 engine = SearchEngine(INDEX_DIR)
@@ -71,6 +73,23 @@ class DownloadRequest(BaseModel):
     ids: list[int]
 
 
+def _iter_file_blocks(path: Path) -> Iterator[bytes]:
+    with path.open('rb') as file:
+        while block := file.read(READ_BLOCK_BYTES):
+            yield block
+
+
+def _zip_members(files: list[tuple[Path, str]]) -> Iterator[MemberFile]:
+    for path, name in files:
+        yield (
+            name,
+            datetime.fromtimestamp(path.stat().st_mtime),
+            0o600,
+            NO_COMPRESSION_64,
+            _iter_file_blocks(path),
+        )
+
+
 @app.post('/api/download')
 def download(req: DownloadRequest):
     paths: dict[Path, None] = {}
@@ -83,16 +102,19 @@ def download(req: DownloadRequest):
     if not paths:
         raise HTTPException(404, '沒有可下載的照片')
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
-        used = set()
-        for path in paths:
-            name, n = path.name, 1
-            while name in used:
-                name = f'{path.stem}_{n}{path.suffix}'
-                n += 1
-            used.add(name)
-            zf.write(path, name)
+    files: list[tuple[Path, str]] = []
+    used = set()
+    for path in paths:
+        name, n = path.name, 1
+        while name in used:
+            name = f'{path.stem}_{n}{path.suffix}'
+            n += 1
+        used.add(name)
+        files.append((path, name))
 
     headers = {'Content-Disposition': 'attachment; filename="find-me-photos.zip"'}
-    return Response(buf.getvalue(), media_type='application/zip', headers=headers)
+    return StreamingResponse(
+        stream_zip(_zip_members(files)),
+        media_type='application/zip',
+        headers=headers,
+    )
