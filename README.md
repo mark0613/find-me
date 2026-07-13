@@ -24,7 +24,15 @@ uv sync
 uv run python -m src.build_index --photos "D:\你的照片目錄"
 ```
 
-索引會存到 `data/index/`（只存向量與照片路徑，不複製照片）。照片搬家或改名後需重跑此指令。
+索引會存到 `data/index/`（只存向量與照片路徑，不複製照片）。
+
+若只是整個照片根目錄搬到新位置，保留原本的子目錄結構後可直接重新連結既有 index，不需重跑人臉辨識：
+
+```bash
+uv run python -m src.relink_index /srv/find-me/photos
+```
+
+指令固定更新 `data/index/meta.json`，寫入前會確認 embeddings 筆數與所有新照片路徑，並將原檔備份為 `meta.json.bak-N`。完成後需重新啟動網站。若照片本身有改名或變更子目錄結構，仍需重新建立 index。
 
 ### 2. 啟動網頁
 
