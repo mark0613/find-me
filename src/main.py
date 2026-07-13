@@ -6,11 +6,12 @@ from typing import Iterator
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from stream_zip import NO_COMPRESSION_64, MemberFile, stream_zip
 
 from src.search_engine import NoFaceError, SearchEngine
+from src.thumbnail_cache import ThumbnailCache, ThumbnailEncodeError, ThumbnailReadError
 
 INDEX_DIR = Path(os.environ.get('FINDME_INDEX_DIR', 'data/index'))
 STATIC_DIR = Path(__file__).parent / 'static'
@@ -19,6 +20,7 @@ READ_BLOCK_BYTES = 1024 * 1024
 
 app = FastAPI(title='find-me')
 engine = SearchEngine(INDEX_DIR)
+thumbnail_cache = ThumbnailCache(INDEX_DIR / 'thumbs', max_side=THUMB_MAX_SIDE)
 
 
 @app.get('/')
@@ -51,17 +53,13 @@ def _photo_path(face_id: int) -> Path:
 @app.get('/api/thumb/{face_id}')
 def thumbnail(face_id: int):
     path = _photo_path(face_id)
-    img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
-    if img is None:
-        raise HTTPException(404, '讀不到照片')
-    h, w = img.shape[:2]
-    scale = THUMB_MAX_SIDE / max(h, w)
-    if scale < 1.0:
-        img = cv2.resize(img, (int(w * scale), int(h * scale)))
-    ok, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    if not ok:
-        raise HTTPException(500, '縮圖編碼失敗')
-    return Response(content=buf.tobytes(), media_type='image/jpeg')
+    try:
+        cache_path = thumbnail_cache.get_or_create(path)
+    except ThumbnailReadError as error:
+        raise HTTPException(404, str(error)) from error
+    except ThumbnailEncodeError as error:
+        raise HTTPException(500, str(error)) from error
+    return FileResponse(cache_path, media_type='image/jpeg')
 
 
 @app.get('/api/photo/{face_id}')
