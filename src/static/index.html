@@ -22,6 +22,16 @@
   #thr { width: 200px; }
   #status { margin: 8px 0; min-height: 1.4em; }
   #status.error { color: #d9534f; }
+  #status.searching { display: inline-flex; align-items: center; gap: .45rem; }
+  #status.searching::before {
+    content: ''; width: .85em; height: .85em; flex: 0 0 auto;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    animation: status-spin .75s linear infinite;
+  }
+  @keyframes status-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #status.searching::before { animation: none; }
+  }
   #result-bar { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
   #download {
     padding: 6px 14px; border: none; border-radius: 8px; cursor: pointer;
@@ -100,8 +110,10 @@ function setQuery(file) {
 
 async function search() {
   status.classList.remove('error');
+  status.classList.add('searching');
   status.textContent = '搜尋中…';
   grid.innerHTML = '';
+  grid.setAttribute('aria-busy', 'true');
   hits = [];
   downloadBtn.hidden = true;
   const form = new FormData();
@@ -133,6 +145,9 @@ async function search() {
   } catch (err) {
     status.classList.add('error');
     status.textContent = `錯誤：${err.message}`;
+  } finally {
+    status.classList.remove('searching');
+    grid.removeAttribute('aria-busy');
   }
 }
 
