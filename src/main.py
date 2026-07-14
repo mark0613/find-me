@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime
 from pathlib import Path
@@ -8,6 +9,7 @@ import numpy as np
 from fastapi import FastAPI, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from stream_zip import NO_COMPRESSION_64, MemberFile, stream_zip
 
 from src.search_engine import NoFaceError, SearchEngine
@@ -21,6 +23,7 @@ READ_BLOCK_BYTES = 1024 * 1024
 app = FastAPI(title='find-me')
 engine = SearchEngine(INDEX_DIR)
 thumbnail_cache = ThumbnailCache(INDEX_DIR / 'thumbs', max_side=THUMB_MAX_SIDE)
+inference_slots = asyncio.Semaphore(1)
 
 
 @app.get('/')
@@ -35,7 +38,8 @@ async def search(file: UploadFile, threshold: float = Query(0.4, ge=0.0, le=1.0)
     if img is None:
         raise HTTPException(400, '上傳的檔案不是可讀取的圖片')
     try:
-        hits = engine.search(img, threshold=threshold)
+        async with inference_slots:
+            hits = await run_in_threadpool(engine.search, img, threshold)
     except NoFaceError as e:
         raise HTTPException(422, str(e)) from e
     return [{'id': h.id, 'score': round(h.score, 3), 'filename': Path(h.path).name} for h in hits]
